@@ -38,20 +38,58 @@ jobs:
       - name: Download mpv dev package
         shell: pwsh
         run: |
-          $urls = @(
-            "https://github.com/zhongfly/mpv-winbuild/releases/latest/download/mpv-dev-x86_64-v3-latest.7z",
-            "https://github.com/shinchiro/mpv-winbuild-cmake/releases/latest/download/mpv-dev-x86_64-v3-latest.7z"
+          # Query the GitHub API for the latest release from zhongfly/mpv-winbuild
+          # and find the mpv-dev asset for x86_64
+          $repos = @(
+            "zhongfly/mpv-winbuild",
+            "dyphire/mpv-winbuild"
           )
 
           $downloaded = $false
-          foreach ($url in $urls) {
+          foreach ($repo in $repos) {
             try {
-              Write-Host "Trying: $url"
-              Invoke-WebRequest -Uri $url -OutFile "mpv-dev.7z" -MaximumRetryCount 3
-              $downloaded = $true
-              break
+              Write-Host "Querying latest release from $repo ..."
+              $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" `
+                -Headers @{ "User-Agent" = "BiliBC-CI" }
+
+              # Find the mpv-dev x86_64 asset (not v3, for broader compatibility)
+              $asset = $release.assets | Where-Object {
+                $_.name -match "mpv-dev-x86_64" -and $_.name -match "\.7z$"
+              } | Select-Object -First 1
+
+              if (!$asset) {
+                # Try v3 variant
+                $asset = $release.assets | Where-Object {
+                  $_.name -match "mpv-dev" -and $_.name -match "x86_64" -and $_.name -match "\.7z$"
+                } | Select-Object -First 1
+              }
+
+              if ($asset) {
+                $url = $asset.browser_download_url
+                Write-Host "Downloading: $url"
+                Invoke-WebRequest -Uri $url -OutFile "mpv-dev.7z" -MaximumRetryCount 3
+                $downloaded = $true
+                Write-Host "Successfully downloaded $($asset.name)"
+                break
+              } else {
+                Write-Host "No mpv-dev asset found in $repo latest release"
+                Write-Host "Available assets:"
+                $release.assets | ForEach-Object { Write-Host "  $($_.name)" }
+              }
             } catch {
-              Write-Host "Failed: $_"
+              Write-Host "Failed to query $repo`: $_"
+            }
+          }
+
+          if (-not $downloaded) {
+            # Last resort: try SourceForge
+            try {
+              Write-Host "Trying SourceForge fallback..."
+              $url = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20250929.7z/download"
+              Invoke-WebRequest -Uri $url -OutFile "mpv-dev.7z" -MaximumRetryCount 3 -UserAgent "Mozilla/5.0"
+              $downloaded = $true
+            } catch {
+              Write-Host "SourceForge also failed: $_"
             }
           }
 
