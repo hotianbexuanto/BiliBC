@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # --- Find packages via vcpkg ---
 find_package(SDL2 CONFIG REQUIRED)
-find_package(freetype CONFIG REQUIRED)
+find_package(Freetype CONFIG REQUIRED)
 find_package(cJSON CONFIG REQUIRED)
 
 # --- mpv: prefer MPV_DEV_DIR, fall back to system ---
@@ -71,8 +71,8 @@ target_include_directories(BiliBC PRIVATE
 target_link_libraries(BiliBC PRIVATE
     SDL2::SDL2
     SDL2::SDL2main
-    freetype
-    cjson
+    Freetype::Freetype
+    cjson::cjson
     glad
     yxml
     ${MPV_LIBRARY}

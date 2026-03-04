@@ -8,12 +8,12 @@ on:
   workflow_dispatch:
 
 env:
-  MPV_VERSION: "0.38.0"
   VCPKG_DEFAULT_TRIPLET: x64-windows
 
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,113 +23,153 @@ jobs:
         with:
           arch: x64
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: "2024.12.16"
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg" --depth 1
+          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          echo "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg" >> $env:GITHUB_ENV
 
       - name: Install vcpkg dependencies
-        run: vcpkg install sdl2:x64-windows freetype:x64-windows cjson:x64-windows
+        shell: pwsh
+        run: |
+          & "$env:RUNNER_TEMP\vcpkg\vcpkg.exe" install sdl2:x64-windows freetype:x64-windows cjson:x64-windows
 
       - name: Download mpv dev package
         shell: pwsh
         run: |
-          $url = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20241020-git-c987378.7z/download"
-          $outfile = "mpv-dev.7z"
+          $urls = @(
+            "https://github.com/zhongfly/mpv-winbuild/releases/latest/download/mpv-dev-x86_64-v3-latest.7z",
+            "https://github.com/shinchiro/mpv-winbuild-cmake/releases/latest/download/mpv-dev-x86_64-v3-latest.7z"
+          )
 
-          # Try downloading from GitHub mirror first, then sourceforge
-          try {
-            Invoke-WebRequest -Uri "https://github.com/zhongfly/mpv-winbuild/releases/latest/download/mpv-dev-x86_64-v3-latest.7z" -OutFile $outfile -MaximumRetryCount 3
-          } catch {
-            Write-Host "GitHub mirror failed, trying direct download..."
-            # Create a minimal mpv-dev structure for CI
-            Invoke-WebRequest -Uri $url -OutFile $outfile -MaximumRetryCount 3 -UserAgent "Mozilla/5.0"
-          }
-
-          7z x $outfile -ompv-dev -y
-
-          # List contents to verify
-          Get-ChildItem -Recurse mpv-dev | Select-Object FullName
-
-      - name: Generate mpv.lib from def file
-        shell: pwsh
-        run: |
-          # Find the def file
-          $defFile = Get-ChildItem -Path mpv-dev -Recurse -Filter "*.def" | Select-Object -First 1
-
-          if ($defFile) {
-            $libDir = "mpv-dev/lib"
-            if (!(Test-Path $libDir)) { New-Item -ItemType Directory -Path $libDir }
-
-            # Generate import library from .def
-            lib /def:$($defFile.FullName) /out:mpv-dev/lib/mpv.lib /machine:x64
-            Write-Host "Generated mpv.lib"
-          } else {
-            # Check if mpv.lib already exists
-            $libFile = Get-ChildItem -Path mpv-dev -Recurse -Filter "mpv.lib" | Select-Object -First 1
-            if ($libFile) {
-              Write-Host "mpv.lib already exists at $($libFile.FullName)"
-              $libDir = "mpv-dev/lib"
-              if (!(Test-Path $libDir)) { New-Item -ItemType Directory -Path $libDir }
-              Copy-Item $libFile.FullName "mpv-dev/lib/mpv.lib"
+          $downloaded = $false
+          foreach ($url in $urls) {
+            try {
+              Write-Host "Trying: $url"
+              Invoke-WebRequest -Uri $url -OutFile "mpv-dev.7z" -MaximumRetryCount 3
+              $downloaded = $true
+              break
+            } catch {
+              Write-Host "Failed: $_"
             }
           }
 
-          # Ensure include directory structure
-          $includeDir = "mpv-dev/include/mpv"
+          if (-not $downloaded) {
+            Write-Error "Could not download mpv dev package from any source"
+            exit 1
+          }
+
+          7z x "mpv-dev.7z" -ompv-dev -y
+          Write-Host "=== mpv-dev contents ==="
+          Get-ChildItem -Recurse mpv-dev | Select-Object FullName
+
+      - name: Prepare mpv dev structure
+        shell: pwsh
+        run: |
+          # Normalize directory structure: ensure include/mpv/ lib/ bin/ exist
+          $root = "mpv-dev"
+
+          # --- include/mpv ---
+          $includeDir = "$root/include/mpv"
           if (!(Test-Path $includeDir)) {
-            $headers = Get-ChildItem -Path mpv-dev -Recurse -Filter "*.h"
-            if ($headers) {
-              New-Item -ItemType Directory -Path $includeDir -Force
-              foreach ($h in $headers) {
-                Copy-Item $h.FullName $includeDir
+            New-Item -ItemType Directory -Path $includeDir -Force | Out-Null
+            # Find headers anywhere under mpv-dev
+            Get-ChildItem -Path $root -Recurse -Filter "*.h" | ForEach-Object {
+              Copy-Item $_.FullName $includeDir -Force
+              Write-Host "  Copied header: $($_.Name)"
+            }
+          }
+          Write-Host "Headers in $includeDir`:"
+          Get-ChildItem $includeDir
+
+          # --- lib/mpv.lib (generate from .def if needed) ---
+          $libDir = "$root/lib"
+          if (!(Test-Path $libDir)) { New-Item -ItemType Directory -Path $libDir -Force | Out-Null }
+
+          if (!(Test-Path "$libDir/mpv.lib")) {
+            # Check for existing .lib
+            $existingLib = Get-ChildItem -Path $root -Recurse -Filter "*.lib" | Select-Object -First 1
+            if ($existingLib) {
+              Copy-Item $existingLib.FullName "$libDir/mpv.lib" -Force
+              Write-Host "Copied existing lib: $($existingLib.FullName)"
+            } else {
+              # Generate from .def file
+              $defFile = Get-ChildItem -Path $root -Recurse -Filter "*.def" | Select-Object -First 1
+              if ($defFile) {
+                Write-Host "Generating mpv.lib from $($defFile.FullName)"
+                lib /def:"$($defFile.FullName)" /out:"$libDir/mpv.lib" /machine:x64
+              } else {
+                Write-Error "No .lib or .def found for mpv"
+                exit 1
               }
             }
           }
+          Write-Host "mpv.lib exists: $(Test-Path "$libDir/mpv.lib")"
 
-          # Ensure bin directory with DLL
-          $dllFile = Get-ChildItem -Path mpv-dev -Recurse -Filter "*.dll" | Select-Object -First 1
-          if ($dllFile) {
-            $binDir = "mpv-dev/bin"
-            if (!(Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir }
-            Copy-Item $dllFile.FullName "mpv-dev/bin/libmpv-2.dll" -Force
+          # --- bin/libmpv-2.dll ---
+          $binDir = "$root/bin"
+          if (!(Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir -Force | Out-Null }
+
+          if (!(Test-Path "$binDir/libmpv-2.dll")) {
+            $dll = Get-ChildItem -Path $root -Recurse -Filter "libmpv*.dll" | Select-Object -First 1
+            if (!$dll) {
+              $dll = Get-ChildItem -Path $root -Recurse -Filter "*.dll" | Select-Object -First 1
+            }
+            if ($dll) {
+              Copy-Item $dll.FullName "$binDir/libmpv-2.dll" -Force
+              Write-Host "Copied DLL: $($dll.FullName)"
+            }
           }
 
       - name: Configure CMake
+        shell: pwsh
         run: |
-          cmake --preset ci
+          $mpvDir = (Resolve-Path "mpv-dev").Path
+          cmake -B build `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DMPV_DEV_DIR="$mpvDir"
 
       - name: Build
-        run: |
-          cmake --build build --config Release
+        run: cmake --build build --config Release
 
       - name: Package artifact
         shell: pwsh
         run: |
           $outDir = "BiliBC-Release"
-          New-Item -ItemType Directory -Path $outDir -Force
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
           # Copy executable
-          Copy-Item "build/Release/BiliBC.exe" $outDir
+          $exe = Get-ChildItem -Path build -Recurse -Filter "BiliBC.exe" | Select-Object -First 1
+          if ($exe) { Copy-Item $exe.FullName $outDir }
 
           # Copy mpv DLL
-          $dll = Get-ChildItem -Path mpv-dev -Recurse -Filter "libmpv-2.dll" | Select-Object -First 1
-          if ($dll) { Copy-Item $dll.FullName $outDir }
+          $mpvDll = Get-ChildItem -Path mpv-dev -Recurse -Filter "libmpv-2.dll" | Select-Object -First 1
+          if ($mpvDll) { Copy-Item $mpvDll.FullName $outDir }
 
-          # Copy vcpkg DLLs
-          $vcpkgBin = "build/vcpkg_installed/x64-windows/bin"
-          if (Test-Path $vcpkgBin) {
-            Get-ChildItem "$vcpkgBin/*.dll" | Copy-Item -Destination $outDir
+          # Copy vcpkg runtime DLLs (SDL2, FreeType, cJSON, zlib, bz2, png, brotli)
+          $vcpkgBin = Get-ChildItem -Path build -Recurse -Directory -Filter "bin" |
+            Where-Object { $_.FullName -match "vcpkg_installed" } | Select-Object -First 1
+          if ($vcpkgBin) {
+            Get-ChildItem "$($vcpkgBin.FullName)/*.dll" | ForEach-Object {
+              Copy-Item $_.FullName $outDir
+              Write-Host "  DLL: $($_.Name)"
+            }
+          }
+
+          # Also check for DLLs next to the exe
+          if ($exe) {
+            Get-ChildItem "$($exe.DirectoryName)/*.dll" | ForEach-Object {
+              Copy-Item $_.FullName $outDir -Force
+            }
           }
 
           # Copy shaders and assets
           Copy-Item -Recurse "shaders" "$outDir/shaders"
-          Copy-Item -Recurse "assets" "$outDir/assets"
+          if (Test-Path "assets") { Copy-Item -Recurse "assets" "$outDir/assets" }
 
-          # Copy sample danmaku files
-          Get-ChildItem "*.xml","*.json","*.ass" | Copy-Item -Destination $outDir
-
-          Write-Host "Package contents:"
+          Write-Host "`n=== Package contents ==="
           Get-ChildItem -Recurse $outDir | Select-Object FullName
 
       - name: Upload artifact
