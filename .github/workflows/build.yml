@@ -112,7 +112,6 @@ jobs:
           $includeDir = "$root/include/mpv"
           if (!(Test-Path $includeDir)) {
             New-Item -ItemType Directory -Path $includeDir -Force | Out-Null
-            # Find headers anywhere under mpv-dev
             Get-ChildItem -Path $root -Recurse -Filter "*.h" | ForEach-Object {
               Copy-Item $_.FullName $includeDir -Force
               Write-Host "  Copied header: $($_.Name)"
@@ -121,24 +120,56 @@ jobs:
           Write-Host "Headers in $includeDir`:"
           Get-ChildItem $includeDir
 
-          # --- lib/mpv.lib (generate from .def if needed) ---
+          # --- lib/mpv.lib ---
           $libDir = "$root/lib"
           if (!(Test-Path $libDir)) { New-Item -ItemType Directory -Path $libDir -Force | Out-Null }
 
           if (!(Test-Path "$libDir/mpv.lib")) {
-            # Check for existing .lib
+            # Strategy 1: existing .lib file
             $existingLib = Get-ChildItem -Path $root -Recurse -Filter "*.lib" | Select-Object -First 1
             if ($existingLib) {
               Copy-Item $existingLib.FullName "$libDir/mpv.lib" -Force
               Write-Host "Copied existing lib: $($existingLib.FullName)"
-            } else {
-              # Generate from .def file
-              $defFile = Get-ChildItem -Path $root -Recurse -Filter "*.def" | Select-Object -First 1
-              if ($defFile) {
-                Write-Host "Generating mpv.lib from $($defFile.FullName)"
-                lib /def:"$($defFile.FullName)" /out:"$libDir/mpv.lib" /machine:x64
+            }
+            # Strategy 2: existing .def file
+            elseif (($defFile = Get-ChildItem -Path $root -Recurse -Filter "*.def" | Select-Object -First 1)) {
+              Write-Host "Generating mpv.lib from .def: $($defFile.FullName)"
+              lib /def:"$($defFile.FullName)" /out:"$libDir/mpv.lib" /machine:x64
+            }
+            # Strategy 3: generate .def from DLL using dumpbin, then create .lib
+            else {
+              $dllFile = Get-ChildItem -Path $root -Recurse -Filter "libmpv*.dll" | Select-Object -First 1
+              if (!$dllFile) {
+                $dllFile = Get-ChildItem -Path $root -Recurse -Filter "*.dll" | Select-Object -First 1
+              }
+              if ($dllFile) {
+                Write-Host "Generating .def from DLL: $($dllFile.FullName)"
+                $defPath = "$libDir/mpv.def"
+
+                # Use dumpbin to extract exports and build a .def file
+                $exports = & dumpbin /exports "$($dllFile.FullName)" 2>$null
+                $defContent = "LIBRARY `"libmpv-2.dll`"`nEXPORTS`n"
+                $inExports = $false
+                foreach ($line in $exports) {
+                  if ($line -match "^\s+ordinal\s+hint\s+RVA\s+name") {
+                    $inExports = $true
+                    continue
+                  }
+                  if ($inExports -and $line -match "^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\S+)") {
+                    $defContent += "  $($Matches[1])`n"
+                  }
+                  if ($inExports -and $line -match "^\s*$" -and $defContent.Split("`n").Count -gt 3) {
+                    break
+                  }
+                }
+
+                Set-Content -Path $defPath -Value $defContent -Encoding ASCII
+                Write-Host "Generated .def with $((Get-Content $defPath | Select-String -Pattern '^\s+\S').Count) exports"
+
+                lib /def:"$defPath" /out:"$libDir/mpv.lib" /machine:x64
+                Write-Host "Generated mpv.lib from DLL exports"
               } else {
-                Write-Error "No .lib or .def found for mpv"
+                Write-Error "No DLL, .lib, or .def found for mpv"
                 exit 1
               }
             }
