@@ -33,7 +33,7 @@ jobs:
       - name: Install vcpkg dependencies
         shell: pwsh
         run: |
-          & "$env:RUNNER_TEMP\vcpkg\vcpkg.exe" install sdl2:x64-windows freetype:x64-windows cjson:x64-windows
+          & "$env:RUNNER_TEMP\vcpkg\vcpkg.exe" install
 
       - name: Download mpv dev package
         shell: pwsh
