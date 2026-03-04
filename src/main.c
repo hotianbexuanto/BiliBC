@@ -24,7 +24,7 @@
 
 /* Portable case-insensitive compare */
 #ifdef _MSC_VER
-#define strcasecmp strcasecmp
+#define strcasecmp _stricmp
 #else
 #include <strings.h>
 #endif
