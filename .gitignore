@@ -1,0 +1,40 @@
+# Build
+build/
+out/
+CMakeUserPresets.json
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln
+*.vcxproj*
+
+# Binaries
+*.exe
+*.dll
+*.lib
+*.pdb
+*.obj
+*.ilk
+*.exp
+
+# vcpkg
+vcpkg_installed/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Dependencies downloaded at build
+mpv-dev/
+
+# Config
+bilibc_config.json
+
+# Planning docs (not needed in release)
+docs/plans/
+世界第一公主殿下(World is Mine)   超时空辉夜姬【翻唱 Nanahira & PochiKorone】.ass
+世界第一公主殿下(World is Mine)   超时空辉夜姬【翻唱 Nanahira & PochiKorone】.json
+世界第一公主殿下(World is Mine)   超时空辉夜姬【翻唱 Nanahira & PochiKorone】.xml

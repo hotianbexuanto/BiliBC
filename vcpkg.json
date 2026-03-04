@@ -1,0 +1,10 @@
+{
+  "name": "bilibc",
+  "version-string": "0.1.0",
+  "description": "Bilibili-style danmaku video player",
+  "dependencies": [
+    "sdl2",
+    "freetype",
+    "cjson"
+  ]
+}

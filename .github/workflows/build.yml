@@ -1,0 +1,140 @@
+name: Build BiliBC
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  MPV_VERSION: "0.38.0"
+  VCPKG_DEFAULT_TRIPLET: x64-windows
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "2024.12.16"
+
+      - name: Install vcpkg dependencies
+        run: vcpkg install sdl2:x64-windows freetype:x64-windows cjson:x64-windows
+
+      - name: Download mpv dev package
+        shell: pwsh
+        run: |
+          $url = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20241020-git-c987378.7z/download"
+          $outfile = "mpv-dev.7z"
+
+          # Try downloading from GitHub mirror first, then sourceforge
+          try {
+            Invoke-WebRequest -Uri "https://github.com/zhongfly/mpv-winbuild/releases/latest/download/mpv-dev-x86_64-v3-latest.7z" -OutFile $outfile -MaximumRetryCount 3
+          } catch {
+            Write-Host "GitHub mirror failed, trying direct download..."
+            # Create a minimal mpv-dev structure for CI
+            Invoke-WebRequest -Uri $url -OutFile $outfile -MaximumRetryCount 3 -UserAgent "Mozilla/5.0"
+          }
+
+          7z x $outfile -ompv-dev -y
+
+          # List contents to verify
+          Get-ChildItem -Recurse mpv-dev | Select-Object FullName
+
+      - name: Generate mpv.lib from def file
+        shell: pwsh
+        run: |
+          # Find the def file
+          $defFile = Get-ChildItem -Path mpv-dev -Recurse -Filter "*.def" | Select-Object -First 1
+
+          if ($defFile) {
+            $libDir = "mpv-dev/lib"
+            if (!(Test-Path $libDir)) { New-Item -ItemType Directory -Path $libDir }
+
+            # Generate import library from .def
+            lib /def:$($defFile.FullName) /out:mpv-dev/lib/mpv.lib /machine:x64
+            Write-Host "Generated mpv.lib"
+          } else {
+            # Check if mpv.lib already exists
+            $libFile = Get-ChildItem -Path mpv-dev -Recurse -Filter "mpv.lib" | Select-Object -First 1
+            if ($libFile) {
+              Write-Host "mpv.lib already exists at $($libFile.FullName)"
+              $libDir = "mpv-dev/lib"
+              if (!(Test-Path $libDir)) { New-Item -ItemType Directory -Path $libDir }
+              Copy-Item $libFile.FullName "mpv-dev/lib/mpv.lib"
+            }
+          }
+
+          # Ensure include directory structure
+          $includeDir = "mpv-dev/include/mpv"
+          if (!(Test-Path $includeDir)) {
+            $headers = Get-ChildItem -Path mpv-dev -Recurse -Filter "*.h"
+            if ($headers) {
+              New-Item -ItemType Directory -Path $includeDir -Force
+              foreach ($h in $headers) {
+                Copy-Item $h.FullName $includeDir
+              }
+            }
+          }
+
+          # Ensure bin directory with DLL
+          $dllFile = Get-ChildItem -Path mpv-dev -Recurse -Filter "*.dll" | Select-Object -First 1
+          if ($dllFile) {
+            $binDir = "mpv-dev/bin"
+            if (!(Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir }
+            Copy-Item $dllFile.FullName "mpv-dev/bin/libmpv-2.dll" -Force
+          }
+
+      - name: Configure CMake
+        run: |
+          cmake --preset ci
+
+      - name: Build
+        run: |
+          cmake --build build --config Release
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          $outDir = "BiliBC-Release"
+          New-Item -ItemType Directory -Path $outDir -Force
+
+          # Copy executable
+          Copy-Item "build/Release/BiliBC.exe" $outDir
+
+          # Copy mpv DLL
+          $dll = Get-ChildItem -Path mpv-dev -Recurse -Filter "libmpv-2.dll" | Select-Object -First 1
+          if ($dll) { Copy-Item $dll.FullName $outDir }
+
+          # Copy vcpkg DLLs
+          $vcpkgBin = "build/vcpkg_installed/x64-windows/bin"
+          if (Test-Path $vcpkgBin) {
+            Get-ChildItem "$vcpkgBin/*.dll" | Copy-Item -Destination $outDir
+          }
+
+          # Copy shaders and assets
+          Copy-Item -Recurse "shaders" "$outDir/shaders"
+          Copy-Item -Recurse "assets" "$outDir/assets"
+
+          # Copy sample danmaku files
+          Get-ChildItem "*.xml","*.json","*.ass" | Copy-Item -Destination $outDir
+
+          Write-Host "Package contents:"
+          Get-ChildItem -Recurse $outDir | Select-Object FullName
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BiliBC-Windows-x64
+          path: BiliBC-Release/
+          retention-days: 30
