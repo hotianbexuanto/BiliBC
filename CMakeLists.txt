@@ -72,7 +72,7 @@ target_link_libraries(BiliBC PRIVATE
     SDL2::SDL2
     SDL2::SDL2main
     Freetype::Freetype
-    cjson::cjson
+    cjson
     glad
     yxml
     ${MPV_LIBRARY}
