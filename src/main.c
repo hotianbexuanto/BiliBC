@@ -77,6 +77,12 @@ typedef struct {
     /* Speed menu */
     bool speed_menu_open;
 
+    /* Danmaku settings panel */
+    bool danmaku_panel_open;
+
+    /* Double-click tracking */
+    Uint32 last_click_time;
+
     /* Timing */
     Uint64 last_tick;
     double prev_player_time;  /* For detecting seeks */
@@ -465,6 +471,15 @@ static void app_handle_event(App *app, SDL_Event *e) {
         app->last_mouse_y = e->motion.y;
         break;
 
+    case SDL_MOUSEBUTTONDOWN:
+        if (e->button.button == SDL_BUTTON_LEFT && e->button.clicks == 2) {
+            /* Double-click → toggle fullscreen */
+            app->fullscreen = !app->fullscreen;
+            SDL_SetWindowFullscreen(app->window,
+                app->fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+        }
+        break;
+
     case SDL_KEYDOWN: {
         SDL_Keymod mod = SDL_GetModState();
         bool ctrl = (mod & KMOD_CTRL) != 0;
@@ -560,6 +575,9 @@ static void app_handle_event(App *app, SDL_Event *e) {
                 app->fullscreen = false;
                 SDL_SetWindowFullscreen(app->window, 0);
             }
+            break;
+        case SDLK_q:
+            app->running = false;
             break;
         }
         break;
@@ -816,13 +834,79 @@ static void app_render(App *app) {
         bool dm_on = ui_toggle(&app->ui, 4, rx, btn_y + 8, app->danmaku.enabled);
         app->danmaku.enabled = dm_on;
 
+        /* Danmaku settings button (gear icon next to toggle) */
+        rx -= 30;
+        if (ui_button(&app->ui, 6, rx, btn_y + 4, 26, 26, "Set", false)) {
+            app->danmaku_panel_open = !app->danmaku_panel_open;
+        }
+        if (app->text_renderer && app->ui.bar_alpha > 0.01f) {
+            text_renderer_begin(app->text_renderer, w, h);
+            text_renderer_draw(app->text_renderer, "\xe2\x9a\x99",  /* ⚙ gear */
+                               rx + 5, btn_y + 6, 0.6f, 0xCCCCCC,
+                               app->ui.bar_alpha);
+            text_renderer_end(app->text_renderer);
+        }
+
         /* Danmaku label */
         if (app->text_renderer && app->ui.bar_alpha > 0.01f) {
             text_renderer_begin(app->text_renderer, w, h);
             text_renderer_draw(app->text_renderer, _("ctrl.danmaku"),
-                               rx - 45, btn_y + 10, 0.5f, 0xCCCCCC,
+                               rx - 50, btn_y + 10, 0.5f, 0xCCCCCC,
                                app->ui.bar_alpha);
             text_renderer_end(app->text_renderer);
+        }
+
+        /* Danmaku settings panel popup */
+        if (app->danmaku_panel_open && app->ui.bar_alpha > 0.5f) {
+            float panel_w = 220, panel_h = 140;
+            float panel_x = rx - panel_w + 20;
+            float panel_y = btn_y - panel_h - 15;
+            float alpha = app->ui.bar_alpha;
+
+            /* Panel background */
+            ui_draw_rect(&app->ui, panel_x, panel_y, panel_w, panel_h, 10,
+                         0.1f, 0.1f, 0.1f, 0.9f * alpha);
+
+            float label_x = panel_x + 12;
+            float slider_x = panel_x + 80;
+            float slider_w = panel_w - 95;
+            float row_h = 36;
+            float cy = panel_y + 15;
+
+            /* Opacity slider */
+            if (app->text_renderer) {
+                text_renderer_begin(app->text_renderer, w, h);
+                text_renderer_draw(app->text_renderer, _("ctrl.opacity"),
+                                   label_x, cy + 6, 0.45f, 0xBBBBBB, alpha);
+                text_renderer_end(app->text_renderer);
+            }
+            float new_opacity = ui_slider(&app->ui, 20, slider_x, cy, slider_w, 24,
+                                           app->danmaku.opacity);
+            app->danmaku.opacity = new_opacity;
+            cy += row_h;
+
+            /* Font scale slider (50% - 200%) */
+            if (app->text_renderer) {
+                text_renderer_begin(app->text_renderer, w, h);
+                text_renderer_draw(app->text_renderer, _("ctrl.fontsize"),
+                                   label_x, cy + 6, 0.45f, 0xBBBBBB, alpha);
+                text_renderer_end(app->text_renderer);
+            }
+            float font_val = (float)(app->danmaku.font_scale - 50) / 150.0f; /* 50..200 → 0..1 */
+            float new_font = ui_slider(&app->ui, 21, slider_x, cy, slider_w, 24, font_val);
+            app->danmaku.font_scale = (int)(new_font * 150.0f + 50.0f);
+            cy += row_h;
+
+            /* Speed slider (0.5x - 2.0x) */
+            if (app->text_renderer) {
+                text_renderer_begin(app->text_renderer, w, h);
+                text_renderer_draw(app->text_renderer, _("ctrl.dmspeed"),
+                                   label_x, cy + 6, 0.45f, 0xBBBBBB, alpha);
+                text_renderer_end(app->text_renderer);
+            }
+            float speed_val = (app->danmaku.speed_factor - 0.5f) / 1.5f; /* 0.5..2.0 → 0..1 */
+            float new_speed = ui_slider(&app->ui, 22, slider_x, cy, slider_w, 24, speed_val);
+            app->danmaku.speed_factor = new_speed * 1.5f + 0.5f;
         }
 
         /* Speed button */

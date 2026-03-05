@@ -24,6 +24,9 @@ static const I18nEntry strings[] = {
     { "ctrl.danmaku",    { "Danmaku",                     "\xe5\xbc\xb9\xe5\xb9\x95" } },
     { "ctrl.speed",      { "Speed",                       "\xe5\x80\x8d\xe9\x80\x9f" } },
     { "ctrl.screenshot", { "Screenshot",                  "\xe6\x88\xaa\xe5\x9b\xbe" } },
+    { "ctrl.opacity",    { "Opacity",                     "\xe9\x80\x8f\xe6\x98\x8e\xe5\xba\xa6" } },
+    { "ctrl.fontsize",   { "Font Size",                   "\xe5\xad\x97\xe5\x8f\xb7" } },
+    { "ctrl.dmspeed",    { "DM Speed",                    "\xe5\xbc\xb9\xe9\x80\x9f" } },
 
     /* Menu */
     { "menu.open_video",   { "Open Video",                "\xe6\x89\x93\xe5\xbc\x80\xe8\xa7\x86\xe9\xa2\x91" } },
