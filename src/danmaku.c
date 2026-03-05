@@ -1,5 +1,6 @@
 /* danmaku.c - Danmaku display manager */
 #include "danmaku.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>

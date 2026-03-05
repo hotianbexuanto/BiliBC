@@ -391,13 +391,17 @@ static bool app_init(App *app, int argc, char **argv) {
 /* Shutdown                                                            */
 /* ------------------------------------------------------------------ */
 static void app_shutdown(App *app) {
-    /* Save config */
-    SDL_GetWindowPosition(app->window, &app->config.window_x, &app->config.window_y);
-    SDL_GetWindowSize(app->window, &app->config.window_w, &app->config.window_h);
-    app->config.fullscreen = (SDL_GetWindowFlags(app->window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
-    app->config.volume = player_get_volume(app->player);
-    app->config.speed = player_get_speed(app->player);
-    app->config.last_position = player_get_time(app->player);
+    /* Save config (only if we have a valid window) */
+    if (app->window) {
+        SDL_GetWindowPosition(app->window, &app->config.window_x, &app->config.window_y);
+        SDL_GetWindowSize(app->window, &app->config.window_w, &app->config.window_h);
+        app->config.fullscreen = (SDL_GetWindowFlags(app->window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
+    }
+    if (app->player) {
+        app->config.volume = player_get_volume(app->player);
+        app->config.speed = player_get_speed(app->player);
+        app->config.last_position = player_get_time(app->player);
+    }
     app->config.danmaku_enabled = app->danmaku.enabled;
     app->config.danmaku_opacity = app->danmaku.opacity;
     app->config.danmaku_speed = app->danmaku.speed_factor;
@@ -416,8 +420,8 @@ static void app_shutdown(App *app) {
     if (app->quad_vbo) glDeleteBuffers(1, &app->quad_vbo);
 
     player_destroy(app->player);
-    SDL_GL_DeleteContext(app->gl_ctx);
-    SDL_DestroyWindow(app->window);
+    if (app->gl_ctx) SDL_GL_DeleteContext(app->gl_ctx);
+    if (app->window) SDL_DestroyWindow(app->window);
     SDL_Quit();
 }
 
