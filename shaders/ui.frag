@@ -18,7 +18,7 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 
 void main() {
     /* Convert from tex coords to pixel coords */
-    vec2 pixelPos = vTexCoord * uResolution;
+    vec2 pixelPos = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * uResolution;
     vec2 center = uRect.xy + uRect.zw * 0.5;
     vec2 halfSize = uRect.zw * 0.5;
 

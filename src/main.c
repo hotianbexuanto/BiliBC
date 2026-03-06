@@ -785,7 +785,7 @@ static void app_render(App *app) {
         if (app->text_renderer && app->ui.bar_alpha > 0.01f) {
             text_renderer_begin(app->text_renderer, w, h);
             text_renderer_draw(app->text_renderer,
-                               paused ? "\xe2\x96\xb6" : "\xe2\x8f\xb8",
+                               paused ? ">" : "||",
                                cx + 8, btn_y + 6, 0.7f, 0xFFFFFF,
                                app->ui.bar_alpha);
             text_renderer_end(app->text_renderer);
@@ -841,7 +841,7 @@ static void app_render(App *app) {
         }
         if (app->text_renderer && app->ui.bar_alpha > 0.01f) {
             text_renderer_begin(app->text_renderer, w, h);
-            text_renderer_draw(app->text_renderer, "\xe2\x9a\x99",  /* ⚙ gear */
+            text_renderer_draw(app->text_renderer, "*",  /* gear/settings */
                                rx + 5, btn_y + 6, 0.6f, 0xCCCCCC,
                                app->ui.bar_alpha);
             text_renderer_end(app->text_renderer);

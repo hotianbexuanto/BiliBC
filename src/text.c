@@ -225,19 +225,19 @@ FontContext *font_ctx_create(const char *font_path, int base_size) {
 
     /* Try user-provided font, then fall back to system fonts */
     const char *paths_to_try[] = {
-        font_path,
+        font_path,                           /* may be NULL */
         "assets/fonts/NotoSansSC-Regular.ttf",
         "assets/fonts/NotoSansCJK-Regular.ttc",
         "C:/Windows/Fonts/msyh.ttc",        /* Microsoft YaHei */
         "C:/Windows/Fonts/simsun.ttc",       /* SimSun */
         "C:/Windows/Fonts/simhei.ttf",       /* SimHei */
         "C:/Windows/Fonts/arial.ttf",        /* Fallback */
-        NULL
     };
+    int num_paths = (int)(sizeof(paths_to_try) / sizeof(paths_to_try[0]));
 
     bool loaded = false;
-    for (int i = 0; paths_to_try[i]; i++) {
-        if (!paths_to_try[i]) continue;
+    for (int i = 0; i < num_paths; i++) {
+        if (!paths_to_try[i]) continue;      /* skip NULL entries */
         if (FT_New_Face(ctx->ft, paths_to_try[i], 0, &ctx->face) == 0) {
             printf("[Text] Loaded font: %s\n", paths_to_try[i]);
             loaded = true;
