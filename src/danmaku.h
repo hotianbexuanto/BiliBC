@@ -45,7 +45,7 @@ bool danmaku_mgr_load(DanmakuManager *mgr, const char *path);
 
 /* Update: activate new danmaku and move existing ones */
 void danmaku_mgr_update(DanmakuManager *mgr, double time, float dt,
-                         int screen_w, int screen_h);
+                         int screen_w, int screen_h, bool paused);
 
 /* Reset state (e.g., after seek) */
 void danmaku_mgr_reset(DanmakuManager *mgr, double time);

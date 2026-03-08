@@ -80,6 +80,9 @@ typedef struct {
     /* Danmaku settings panel */
     bool danmaku_panel_open;
 
+    /* Danmaku file info */
+    char danmaku_filename[256];  /* Display name of loaded danmaku file */
+
     /* Double-click tracking */
     Uint32 last_click_time;
 
@@ -224,8 +227,19 @@ static void open_video(App *app, const char *path) {
 }
 
 static void open_danmaku(App *app, const char *path) {
-    danmaku_mgr_load(&app->danmaku, path);
-    danmaku_mgr_reset(&app->danmaku, player_get_time(app->player));
+    if (danmaku_mgr_load(&app->danmaku, path)) {
+        danmaku_mgr_reset(&app->danmaku, player_get_time(app->player));
+
+        /* Extract filename from path */
+        const char *filename = strrchr(path, '/');
+        if (!filename) filename = strrchr(path, '\\');
+        if (filename) filename++; else filename = path;
+        snprintf(app->danmaku_filename, sizeof(app->danmaku_filename), "%s", filename);
+
+        printf("[App] Loaded danmaku: %s\n", path);
+    } else {
+        fprintf(stderr, "[App] Failed to load danmaku: %s\n", path);
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -616,7 +630,8 @@ static void app_update(App *app, float dt) {
     app->prev_player_time = cur_time;
 
     /* Update danmaku */
-    danmaku_mgr_update(&app->danmaku, cur_time, dt, app->width, app->height);
+    bool paused = player_is_paused(app->player);
+    danmaku_mgr_update(&app->danmaku, cur_time, dt, app->width, app->height, paused);
 
     /* Update UI bar visibility */
     ui_update_bar(&app->ui, dt, app->mouse_moved);
@@ -834,6 +849,34 @@ static void app_render(App *app) {
         bool dm_on = ui_toggle(&app->ui, 4, rx, btn_y + 8, app->danmaku.enabled);
         app->danmaku.enabled = dm_on;
 
+        /* Danmaku load button */
+        rx -= 36;
+        if (ui_button(&app->ui, 7, rx, btn_y + 4, 32, 26, "Load", false)) {
+            char *danmaku_path = platform_open_danmaku_dialog();
+            if (danmaku_path) {
+                if (danmaku_mgr_load(&app->danmaku, danmaku_path)) {
+                    printf("[App] Loaded danmaku: %s\n", danmaku_path);
+                    danmaku_mgr_reset(&app->danmaku, player_get_time(app->player));
+
+                    /* Extract filename from path */
+                    const char *filename = strrchr(danmaku_path, '/');
+                    if (!filename) filename = strrchr(danmaku_path, '\\');
+                    if (filename) filename++; else filename = danmaku_path;
+                    snprintf(app->danmaku_filename, sizeof(app->danmaku_filename), "%s", filename);
+                } else {
+                    fprintf(stderr, "[App] Failed to load danmaku: %s\n", danmaku_path);
+                }
+                free(danmaku_path);
+            }
+        }
+        if (app->text_renderer && app->ui.bar_alpha > 0.01f) {
+            text_renderer_begin(app->text_renderer, w, h);
+            text_renderer_draw(app->text_renderer, "+",  /* plus icon for load */
+                               rx + 10, btn_y + 4, 0.8f, 0xCCCCCC,
+                               app->ui.bar_alpha);
+            text_renderer_end(app->text_renderer);
+        }
+
         /* Danmaku settings button (gear icon next to toggle) */
         rx -= 30;
         if (ui_button(&app->ui, 6, rx, btn_y + 4, 26, 26, "Set", false)) {
@@ -850,9 +893,20 @@ static void app_render(App *app) {
         /* Danmaku label */
         if (app->text_renderer && app->ui.bar_alpha > 0.01f) {
             text_renderer_begin(app->text_renderer, w, h);
-            text_renderer_draw(app->text_renderer, _("ctrl.danmaku"),
-                               rx - 50, btn_y + 10, 0.5f, 0xCCCCCC,
-                               app->ui.bar_alpha);
+
+            /* Show danmaku filename if loaded, otherwise show label */
+            if (app->danmaku_filename[0] != '\0') {
+                char display[64];
+                snprintf(display, sizeof(display), "%.40s", app->danmaku_filename);
+                float label_w = font_measure_text(app->font, display, 0.5f);
+                text_renderer_draw(app->text_renderer, display,
+                                   rx - label_w - 10, btn_y + 10, 0.5f, 0x88AAFF,
+                                   app->ui.bar_alpha);
+            } else {
+                text_renderer_draw(app->text_renderer, _("ctrl.danmaku"),
+                                   rx - 50, btn_y + 10, 0.5f, 0xCCCCCC,
+                                   app->ui.bar_alpha);
+            }
             text_renderer_end(app->text_renderer);
         }
 

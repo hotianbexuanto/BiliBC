@@ -28,12 +28,19 @@ Player *player_create(void) {
 
     /* Set default options */
     mpv_set_option_string(p->mpv, "vo", "libmpv");
-    mpv_set_option_string(p->mpv, "hwdec", "auto");
+    mpv_set_option_string(p->mpv, "hwdec", "auto-safe");  /* Prefer safe hardware decoding */
+    mpv_set_option_string(p->mpv, "hwdec-codecs", "all");
     mpv_set_option_string(p->mpv, "keep-open", "yes");
     mpv_set_option_string(p->mpv, "idle", "yes");
     mpv_set_option_string(p->mpv, "input-default-bindings", "no");
     mpv_set_option_string(p->mpv, "osc", "no");
     mpv_set_option_string(p->mpv, "terminal", "no");
+
+    /* Performance optimizations */
+    mpv_set_option_string(p->mpv, "vd-lavc-threads", "4");  /* Limit decode threads */
+    mpv_set_option_string(p->mpv, "cache", "yes");
+    mpv_set_option_string(p->mpv, "demuxer-max-bytes", "50M");
+    mpv_set_option_string(p->mpv, "demuxer-max-back-bytes", "20M");
 
     if (mpv_initialize(p->mpv) < 0) {
         fprintf(stderr, "[Player] mpv_initialize failed\n");
@@ -95,6 +102,9 @@ bool player_load(Player *p, const char *path) {
 
 void player_render(Player *p, GLuint fbo, int width, int height) {
     if (!p->render) return;
+
+    /* Only render if mpv has a new frame ready */
+    if (!p->want_redraw) return;
 
     mpv_opengl_fbo mpv_fbo = {
         .fbo = (int)fbo,

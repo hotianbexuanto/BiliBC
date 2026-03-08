@@ -122,17 +122,22 @@ bool ui_button(UIContext *ui, int id, float x, float y, float w, float h,
     }
 
     /* Draw button */
-    float r = 1.0f, g = 1.0f, b = 1.0f;
-    float alpha = 0.15f * ui->bar_alpha;
+    float r = 0.2f, g = 0.2f, b = 0.25f;  /* Darker base color */
+    float alpha = 0.6f * ui->bar_alpha;
 
     if (active_state) {
-        r = 0.0f; g = 0.65f; b = 1.0f;
-        alpha = 0.8f * ui->bar_alpha;
+        r = 0.2f; g = 0.6f; b = 1.0f;  /* Brighter blue for active */
+        alpha = 0.9f * ui->bar_alpha;
     }
-    if (hovered) alpha += 0.1f;
+    if (hovered) {
+        alpha += 0.15f;
+        if (!active_state) {
+            r += 0.1f; g += 0.1f; b += 0.1f;  /* Lighten on hover */
+        }
+    }
     if (ui->active_id == id) alpha += 0.1f;
 
-    ui_draw_rect(ui, x, y, w, h, h * 0.3f, r, g, b, alpha);
+    ui_draw_rect(ui, x, y, w, h, 8.0f, r, g, b, alpha);  /* Larger radius: 8px */
 
     return clicked;
 }
@@ -159,19 +164,19 @@ float ui_slider(UIContext *ui, int id, float x, float y, float w, float h,
 
     /* Draw track */
     float alpha = ui->bar_alpha;
-    ui_draw_rect(ui, x, y + h * 0.35f, w, h * 0.3f, h * 0.15f,
-                 0.5f, 0.5f, 0.5f, 0.3f * alpha);
+    ui_draw_rect(ui, x, y + h * 0.35f, w, h * 0.3f, 4.0f,  /* 4px radius */
+                 0.3f, 0.3f, 0.35f, 0.5f * alpha);
 
     /* Draw filled portion */
-    ui_draw_rect(ui, x, y + h * 0.35f, w * value, h * 0.3f, h * 0.15f,
-                 0.0f, 0.65f, 1.0f, 0.8f * alpha);
+    ui_draw_rect(ui, x, y + h * 0.35f, w * value, h * 0.3f, 4.0f,
+                 0.2f, 0.6f, 1.0f, 0.85f * alpha);  /* Brighter blue */
 
     /* Draw handle */
     float handle_x = x + w * value - h * 0.3f;
     float handle_size = h * 0.6f;
     if (hovered || ui->active_id == id) {
         ui_draw_rect(ui, handle_x, y + h * 0.2f, handle_size, handle_size,
-                     handle_size * 0.5f, 1.0f, 1.0f, 1.0f, 0.9f * alpha);
+                     handle_size * 0.5f, 1.0f, 1.0f, 1.0f, 0.95f * alpha);
     }
 
     return value;
@@ -204,25 +209,25 @@ float ui_progress_bar(UIContext *ui, int id, float x, float y, float w, float h,
     float bar_y = y + (h - bar_h) * 0.5f;
 
     /* Background track */
-    ui_draw_rect(ui, x, bar_y, w, bar_h, bar_h * 0.5f,
-                 0.4f, 0.4f, 0.4f, 0.3f * alpha);
+    ui_draw_rect(ui, x, bar_y, w, bar_h, 4.0f,  /* 4px radius */
+                 0.25f, 0.25f, 0.3f, 0.5f * alpha);
 
     /* Buffered */
     if (buffered > 0) {
-        ui_draw_rect(ui, x, bar_y, w * buffered, bar_h, bar_h * 0.5f,
-                     0.6f, 0.6f, 0.6f, 0.3f * alpha);
+        ui_draw_rect(ui, x, bar_y, w * buffered, bar_h, 4.0f,
+                     0.4f, 0.4f, 0.45f, 0.4f * alpha);
     }
 
     /* Progress */
-    ui_draw_rect(ui, x, bar_y, w * progress, bar_h, bar_h * 0.5f,
-                 0.0f, 0.65f, 1.0f, 0.9f * alpha);
+    ui_draw_rect(ui, x, bar_y, w * progress, bar_h, 4.0f,
+                 0.2f, 0.6f, 1.0f, 0.95f * alpha);  /* Brighter blue */
 
     /* Handle dot */
     if (hovered || ui->active_id == id) {
         float cx = x + w * progress;
         float dot = bar_h * 2.0f;
         ui_draw_rect(ui, cx - dot * 0.5f, bar_y - dot * 0.25f, dot, dot,
-                     dot * 0.5f, 0.0f, 0.65f, 1.0f, alpha);
+                     dot * 0.5f, 0.3f, 0.7f, 1.0f, alpha);  /* Blue handle */
     }
 
     return seek_pos;
@@ -244,15 +249,15 @@ bool ui_toggle(UIContext *ui, int id, float x, float y, bool state) {
 
     /* Track */
     if (state) {
-        ui_draw_rect(ui, x, y, w, h, h * 0.5f, 0.0f, 0.65f, 1.0f, 0.6f * alpha);
+        ui_draw_rect(ui, x, y, w, h, h * 0.5f, 0.2f, 0.6f, 1.0f, 0.85f * alpha);  /* Brighter blue */
     } else {
-        ui_draw_rect(ui, x, y, w, h, h * 0.5f, 0.5f, 0.5f, 0.5f, 0.3f * alpha);
+        ui_draw_rect(ui, x, y, w, h, h * 0.5f, 0.3f, 0.3f, 0.35f, 0.5f * alpha);  /* Darker gray */
     }
 
     /* Thumb */
     float thumb_x = state ? x + w - h : x;
     ui_draw_rect(ui, thumb_x + 2, y + 2, h - 4, h - 4, (h - 4) * 0.5f,
-                 1.0f, 1.0f, 1.0f, 0.9f * alpha);
+                 1.0f, 1.0f, 1.0f, 0.95f * alpha);
 
     return state;
 }

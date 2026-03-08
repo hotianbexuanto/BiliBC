@@ -107,15 +107,18 @@ static int find_bottom_track(DanmakuManager *mgr, double time, int screen_h) {
 }
 
 void danmaku_mgr_update(DanmakuManager *mgr, double time, float dt,
-                         int screen_w, int screen_h)
+                         int screen_w, int screen_h, bool paused)
 {
     if (!mgr->enabled) return;
 
-    /* Update scroll track end positions */
-    for (int i = 0; i < mgr->max_tracks; i++) {
-        float speed = (screen_w + 200.0f) / (SCROLL_DURATION / mgr->speed_factor);
-        mgr->scroll_track_end[i] -= speed * dt;
-        if (mgr->scroll_track_end[i] < 0) mgr->scroll_track_end[i] = 0;
+    /* When paused, don't update positions but still allow activation of new danmaku at current time */
+    if (!paused) {
+        /* Update scroll track end positions */
+        for (int i = 0; i < mgr->max_tracks; i++) {
+            float speed = (screen_w + 200.0f) / (SCROLL_DURATION / mgr->speed_factor);
+            mgr->scroll_track_end[i] -= speed * dt;
+            if (mgr->scroll_track_end[i] < 0) mgr->scroll_track_end[i] = 0;
+        }
     }
 
     /* Remove expired active danmaku */
@@ -190,7 +193,8 @@ void danmaku_mgr_update(DanmakuManager *mgr, double time, float dt,
                 break;
             case DANMAKU_MODE_BOTTOM:
                 ad->x = ((float)screen_w - width) * 0.5f;
-                ad->y = (float)(screen_h - (track + 1) * TRACK_HEIGHT - 60);
+                /* Bottom danmaku: start from bottom, leave space for control bar (80px) */
+                ad->y = (float)(screen_h - 80 - (track + 1) * TRACK_HEIGHT);
                 break;
             }
         }
@@ -198,12 +202,14 @@ void danmaku_mgr_update(DanmakuManager *mgr, double time, float dt,
         mgr->next_index++;
     }
 
-    /* Move active scroll danmaku */
-    for (int i = 0; i < mgr->active_count; i++) {
-        ActiveDanmaku *ad = &mgr->active[i];
-        if (!ad->active) continue;
-        if (ad->item->mode == DANMAKU_MODE_SCROLL) {
-            ad->x -= ad->speed * dt;
+    /* Move active scroll danmaku (only when not paused) */
+    if (!paused) {
+        for (int i = 0; i < mgr->active_count; i++) {
+            ActiveDanmaku *ad = &mgr->active[i];
+            if (!ad->active) continue;
+            if (ad->item->mode == DANMAKU_MODE_SCROLL) {
+                ad->x -= ad->speed * dt;
+            }
         }
     }
 
